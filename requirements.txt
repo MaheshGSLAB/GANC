@@ -1,0 +1,6 @@
+paramiko
+langchain
+openai
+streamlit
+tiktoken
+pillow
