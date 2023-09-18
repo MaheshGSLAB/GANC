@@ -11,6 +11,7 @@ from langchain.chains import ConversationChain
 from ssh_commands import get_ssh_cmd_output
 from PIL import Image
 import config
+from openai.error import RateLimitError
 import os
 
 CMD_WAIT = 2
@@ -98,39 +99,41 @@ st.write()
 st.markdown(f"<h4>Enter configuration problem</h4>",unsafe_allow_html=True)
 user_query = st.text_area("Enter configuration problem", '', label_visibility="collapsed", placeholder="Hi! How may I assist you?")
 if user_query:
-    response = conversation.predict(input=user_query)
-    print(response)
-    if "apologize" in response or "confusion" in response or "sorry" in response or "Apologies" in response:
-        st.warning("Please check your input query. It seems to be incorrect!", icon='⚠')
-    else:
-        st.write('Configuration command for the above problem is:')
-        st.divider()
-        config_cmds = response.split('\n')
-        end_index = -1
-        for i in range(len(config_cmds)):
-            if 'enable' in config_cmds[i]:
-                start_index = i
-                break
-        
-        for i in range(start_index, len(config_cmds)):
-            if '```' in config_cmds[i]:
-                end_index = i
-                break
-
-        if end_index == -1:
-            config_cmds = config_cmds[start_index:]
+    try:
+        response = conversation.predict(input=user_query)
+        if "apologize" in response or "confusion" in response or "sorry" in response or "Apologies" in response:
+            st.warning("Please check your input query. It seems to be incorrect!", icon='⚠')
         else:
-            config_cmds = config_cmds[start_index:end_index]
-        for i in config_cmds:
-            st.write(f"`{i.strip('AI: ')}`")
+            st.write('Configuration command for the above problem is:')
+            st.divider()
+            config_cmds = response.split('\n')
+            start_index = 0
+            end_index = -1
+            for i in range(len(config_cmds)):
+                if 'enable' in config_cmds[i]:
+                    start_index = i
+                    break
 
-        st.divider()
+            for i in range(start_index, len(config_cmds)):
+                if '```' in config_cmds[i]:
+                    end_index = i
+                    break
 
-        st.markdown(f"<h4>Want to push the commands on Arista EOS device</h4>",unsafe_allow_html=True)
-        pushed = st.button("Execute commands", on_click=clicked)
-        if st.session_state.clicked:
-            config_cmd = [cmd.strip('AI: ')+"\n" for cmd in config_cmds]
-            get_command_output(host, user, password, config_cmd, cmd_wait=CMD_WAIT)
+            if end_index == -1:
+                config_cmds = config_cmds[start_index:]
+            else:
+                config_cmds = config_cmds[start_index:end_index]
+            for i in config_cmds:
+                st.write(f"`{i.strip('AI: ')}`")
+
+            st.divider()
+
+            st.markdown(f"<h4>Want to push the commands on Arista EOS device</h4>", unsafe_allow_html=True)
+            pushed = st.button("Execute commands", on_click=clicked)
+            if st.session_state.clicked:
+                config_cmd = [cmd.strip('AI: ')+"\n" for cmd in config_cmds]
+                get_command_output(host, user, password, config_cmd, cmd_wait=CMD_WAIT)
+    except RateLimitError as excep:
+        st.error('Please try after 1 minute, OpenAI exceeds its limit for per minute request.', icon="🚨")
 else:
     st.divider()
-    
